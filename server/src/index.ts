@@ -6,6 +6,7 @@ import productsRouter from "./routes/products";
 import salesRouter from "./routes/sales";
 import orderRouter from "./routes/orders";
 import authRouter from "./routes/auth";
+import userRouter from "./routes/users.routes";
 import { PrismaClient } from "@prisma/client";
 
 const app = express();
@@ -59,6 +60,8 @@ app.use("/sales", salesRouter);
 // call for order (in breakdown)
 app.use("/orders", orderRouter);
 
+// call for users
+app.use("/users", userRouter);
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
