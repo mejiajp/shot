@@ -1,11 +1,9 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import * as userService from "../services/users.service";
-const prisma = new PrismaClient();
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany();
+    const users = await userService.getUsersAll();
 
     return res.status(200).json(users);
   } catch (error) {
