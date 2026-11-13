@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
+import React from 'react'
+
 import UpdateIcon from '../../assets/svg/edit-01-stroke-rounded'
 import DeleteIcon from '../../assets/svg/delete-02-stroke-rounded'
+
 function ProductsCard({ product, onEdit, onDelete }) {
   return (
     <div
@@ -23,8 +25,10 @@ function ProductsCard({ product, onEdit, onDelete }) {
           } group-hover:hidden`}
         >
           <h1 className="w-[70%] leading-none">{product.name}</h1>
+
           <p>₱{product.price}</p>
         </div>
+
         <div
           className={`text-customWhite p-1 px-3 rounded-full font-semibold text-sm ${
             product.category === 'Coffee' ? 'bg-[#4d2a1f]' : 'bg-[#b02222]'
@@ -33,29 +37,25 @@ function ProductsCard({ product, onEdit, onDelete }) {
           <p>{product.category}</p>
         </div>
       </div>
+
       {/* Hidden Content */}
       <div className="absolute bottom-0 w-full h-2/5 flex space-x-4 justify-center items-center opacity-0 group-hover:opacity-100 group-hover:flex transition-opacity duration-300">
         <button
+          type="button"
           onClick={() => onEdit(product)}
           className="rounded-full p-3 bg-[#fd7d14df] hover:bg-[#fd7744]"
         >
           <UpdateIcon className="text-customWhite" />
         </button>
+
         <button
+          type="button"
           onClick={() => onDelete(product)}
           className="rounded-full p-3 bg-[#dc3545df] hover:bg-[#dc3545]"
         >
           <DeleteIcon className="text-customWhite" />
         </button>
       </div>
-
-      {/* Confirmation Modal for Delete */}
-      {/* <ConfirmationModal
-        isVisible={isConfirmationVisible}
-        onClose={handleCloseConfirmation}
-        onConfirm={handleConfirmDelete}
-        actionType="delete" // Indicate the type of action
-      /> */}
     </div>
   )
 }

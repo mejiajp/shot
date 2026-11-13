@@ -1,31 +1,51 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+
 import ProductsCard from '../components/Products/ProductsCard'
 import ProductModal from '../components/Products/ProductModal'
+import ConfirmationModal from '../components/Products/ConfirmationModal'
+
 import Search from '../assets/search-01-stroke-rounded.jsx'
+
+const EMPTY_PRODUCT = {
+  image: '',
+  name: '',
+  price: '',
+  category: '',
+}
 
 function Products() {
   const [actionType, setActionType] = useState('')
-  const [query, setQuery] = useState('')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [initialProduct, setInitialProduct] = useState({
-    image: '',
-    name: '',
-    price: '',
-    category: '',
-  })
-  const [products, setProducts] = useState([]) // State for products
-  const [error, setError] = useState(null) // State for error handling
-  const [loading, setLoading] = useState(true) // State for loading
+  const [pendingAction, setPendingAction] = useState(null)
 
-  // Fetch products from the API
+  const [query, setQuery] = useState('')
+
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isConfirmationVisible, setIsConfirmationVisible] = useState(false)
+
+  const [initialProduct, setInitialProduct] = useState(EMPTY_PRODUCT)
+  const [pendingProduct, setPendingProduct] = useState(null)
+
+  const [products, setProducts] = useState([])
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Fetch products
   const fetchProducts = async () => {
     setLoading(true)
+    setError(null)
+
     try {
       const response = await axios.get('http://localhost:3000/products')
+
       setProducts(response.data)
     } catch (error) {
-      setError(error.message || 'Failed to fetch products')
+      setError(
+        error.response?.data?.message ||
+          error.message ||
+          'Failed to fetch products'
+      )
     } finally {
       setLoading(false)
     }
@@ -35,84 +55,133 @@ function Products() {
     fetchProducts()
   }, [])
 
+  // Open Add Product modal
   const handleAddProduct = () => {
-    setInitialProduct({ image: '', name: '', price: '', category: '' })
+    setInitialProduct({ ...EMPTY_PRODUCT })
     setActionType('add')
     setIsModalOpen(true)
   }
 
-  const addProduct = async (product) => {
-    console.log('Product to be added: ', product)
-    setInitialProduct({ image: '', name: '', price: '', category: '' })
-    setIsModalOpen(false)
-
-    try {
-      const response = await axios.post(
-        'http://localhost:3000/products/create',
-        product
-      )
-      console.log('Respose: ', response)
-      await fetchProducts()
-    } catch (error) {
-      console.error(
-        'Error placing order:',
-        error.response ? error.response.data : error.message
-      )
-    }
-  }
-
+  // Open Update Product modal
   const handleEditProduct = (product) => {
-    setInitialProduct(product)
+    setInitialProduct({ ...product })
     setActionType('update')
     setIsModalOpen(true)
   }
 
+  // Request confirmation for Add or Update
+  const requestConfirmation = (action, product) => {
+    setPendingAction(action)
+    setPendingProduct({ ...product })
+    setIsConfirmationVisible(true)
+  }
+
+  // Request confirmation for Delete
+  const handleDeleteProduct = (product) => {
+    setPendingAction('delete')
+    setPendingProduct(product)
+    setIsConfirmationVisible(true)
+  }
+
+  // Add product API request
+  const addProduct = async (product) => {
+    const response = await axios.post(
+      'http://localhost:3000/products/create',
+      product
+    )
+
+    console.log('Product added:', response.data)
+  }
+
+  // Update product API request
   const updateProduct = async (product) => {
-    console.log('Product to be edited: ', product)
-    setInitialProduct({ image: '', name: '', price: '', category: '' })
-    setIsModalOpen(false)
+    const response = await axios.put(
+      `http://localhost:3000/products/update/${product.id}`,
+      product
+    )
+
+    console.log('Product updated:', response.data)
+  }
+
+  // Delete product API request
+  const deleteProduct = async (product) => {
+    const response = await axios.delete(
+      `http://localhost:3000/products/delete/${product.id}`
+    )
+
+    console.log('Product deleted:', response.data)
+  }
+
+  // Execute action only after confirmation
+  const handleConfirmAction = async () => {
+    if (!pendingAction || !pendingProduct || isSubmitting) return
+
+    setIsSubmitting(true)
+    setError(null)
 
     try {
-      const response = await axios.put(
-        `http://localhost:3000/products/update/${product.id}`,
-        product
-      )
-      console.log('Response: ', response.data)
-      await fetchProducts() // Optionally handle the response, e.g., update the UI
+      switch (pendingAction) {
+        case 'add':
+          await addProduct(pendingProduct)
+          break
+
+        case 'update':
+          await updateProduct(pendingProduct)
+          break
+
+        case 'delete':
+          await deleteProduct(pendingProduct)
+          break
+
+        default:
+          return
+      }
+
+      // Close the appropriate modal after success
+      setIsConfirmationVisible(false)
+
+      if (pendingAction !== 'delete') {
+        setIsModalOpen(false)
+        setInitialProduct({ ...EMPTY_PRODUCT })
+        setActionType('')
+      }
+
+      setPendingAction(null)
+      setPendingProduct(null)
+
+      await fetchProducts()
     } catch (error) {
-      console.error(
-        'Error updating product:',
-        error.response ? error.response.data : error.message
+      console.error('Product action failed:', error)
+
+      setError(
+        error.response?.data?.message || error.message || 'Something went wrong'
       )
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const handleDeleteProduct = async (product) => {
-    // Handle delete logic here, like updating state or calling an API
-    console.log(`Deleted: \n Product: ${product.name} \n id: ${product.id}`)
-
-    try {
-      const response = await axios.delete(
-        `http://localhost:3000/products/delete/${product.id}`
-      )
-      console.log('Response: ', response.data)
-      await fetchProducts() // Optionally handle the response, e.g., update the UI
-    } catch (error) {
-      console.error(
-        'Error deleting product:',
-        error.response ? error.response.data : error.message
-      )
-    }
+  // Cancel confirmation without closing the product form
+  const handleCancelConfirmation = () => {
+    setIsConfirmationVisible(false)
+    setPendingAction(null)
+    setPendingProduct(null)
   }
 
+  // Cancel product form
   const handleCancel = () => {
-    setInitialProduct({ image: '', name: '', price: '', category: '' })
+    setInitialProduct({ ...EMPTY_PRODUCT })
+    setActionType('')
     setIsModalOpen(false)
-    console.log('Modal closed and product reset')
   }
+
+  const filteredProducts = products.filter((product) =>
+    product.name.toLowerCase().includes(query.toLowerCase())
+  )
 
   return (
     <div className="h-screen flex-1 overflow-y-auto scrollbar-hide px-10">
+      {/* Header */}
       <div className="py-5 flex">
         <div className="rounded-lg py-3 px-5 mr-5 w-auto bg-[#02342d89]">
           <button
@@ -122,6 +191,7 @@ function Products() {
             New +
           </button>
         </div>
+
         <div className="flex items-center xl:w-[200px] relative overflow-hidden">
           <input
             type="text"
@@ -130,6 +200,7 @@ function Products() {
             className="w-full h-full px-5 py-3 bg-secondary-2 rounded-lg text-gray-700 focus:outline-none"
             placeholder="Search..."
           />
+
           <button
             onClick={() => console.log('Search query:', query)}
             className="absolute right-3"
@@ -139,33 +210,42 @@ function Products() {
         </div>
       </div>
 
-      {/* Display loading and error messages */}
+      {/* Loading and error messages */}
       {loading && <p>Loading products...</p>}
-      {error && <p className="text-red-500">{error}</p>}
 
-      {/* Display products */}
-      <div className="w-full grid grid-cols-[repeat(auto-fill,_minmax(200px,_1fr))] gap-5 mb-5">
-        {products
-          .filter((product) =>
-            product.name.toLowerCase().includes(query.toLowerCase())
-          )
-          .map((product, index) => (
+      {error && <p className="text-red-500 mb-3">{error}</p>}
+
+      {/* Products */}
+      {!loading && (
+        <div className="w-full grid grid-cols-[repeat(auto-fill,_minmax(200px,_1fr))] gap-5 mb-5">
+          {filteredProducts.map((product) => (
             <ProductsCard
-              key={index}
+              key={product.id}
               product={product}
-              onEdit={() => handleEditProduct(product)}
-              onDelete={() => handleDeleteProduct(product)}
+              onEdit={handleEditProduct}
+              onDelete={handleDeleteProduct}
             />
           ))}
-      </div>
+        </div>
+      )}
 
+      {/* Add / Update Product Form */}
       <ProductModal
         isVisible={isModalOpen}
-        onClose={() => handleCancel()}
+        onClose={handleCancel}
         initialProduct={initialProduct}
-        addProduct={addProduct} // Pass whether adding or updating
-        updateProduct={updateProduct}
-        actionType={actionType} // Pass whether adding or updating
+        actionType={actionType}
+        onRequestConfirmation={requestConfirmation}
+      />
+
+      {/* Shared Confirmation Modal */}
+      <ConfirmationModal
+        isVisible={isConfirmationVisible}
+        onClose={handleCancelConfirmation}
+        onConfirm={handleConfirmAction}
+        actionType={pendingAction}
+        productName={pendingProduct?.name}
+        isSubmitting={isSubmitting}
       />
     </div>
   )
