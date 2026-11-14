@@ -1,37 +1,71 @@
 import { Request, Response } from "express";
-import * as userService from "../services/users.service";
 
-export const getUsers = async (req: Request, res: Response) => {
+import { signIn as signInService, verifyToken } from "../services/auth.service";
+
+// LOGIN
+export const signIn = async (req: Request, res: Response) => {
+  const { username, password } = req.body;
+
   try {
-    const users = await userService.getUsersAll();
+    const result = await signInService(username, password);
 
-    return res.status(200).json(users);
+    return res.json(result);
   } catch (error) {
-    return res
-      .status(500)
-      .json({ message: "Failed to fetch users, Error, ", error });
+    if (
+      error instanceof Error &&
+      (error.message === "Username doesn't exist" ||
+        error.message === "Invalid password")
+    ) {
+      return res.status(401).json({
+        error: error.message,
+      });
+    }
+
+    return res.status(500).json({
+      error: "Login failed",
+    });
   }
 };
 
-export const createUser = async (req: Request, res: Response) => {
-  const { username, password, role } = req.body;
+// GET CURRENT USER
+export const getMe = (req: Request, res: Response) => {
+  return res.status(200).json({
+    user: (req as any).user,
+  });
+};
 
-  if (!username || !password || !role) {
-    return res.status(400).json({ message: "Missing required fields" });
+// LOGOUT
+export const logout = (req: Request, res: Response) => {
+  return res.status(200).json({
+    message: "Logout successful (client should remove the token)",
+  });
+};
+
+// AUTHENTICATE TOKEN
+export const authenticateToken = (
+  req: Request,
+  res: Response,
+  next: Function
+) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Unauthorized, token missing",
+    });
   }
 
   try {
-    const newUser = await userService.createUser({
-      username,
-      password,
-      role,
-    });
+    const user = verifyToken(token);
 
-    return res.status(201).json(newUser);
+    // Attach decoded user data to request
+    (req as any).user = user;
+
+    next();
   } catch (error) {
-    return res.status(500).json({
-      message: "Failed to create user",
-      error,
+    return res.status(403).json({
+      error: "Invalid token",
     });
   }
 };
