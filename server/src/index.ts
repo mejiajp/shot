@@ -2,10 +2,10 @@ import express from "express";
 import session from "express-session";
 import cors from "cors";
 import path from "path";
-import productsRouter from "./routes/products";
-import salesRouter from "./routes/sales";
-import orderRouter from "./routes/orders";
-import authRouter from "./routes/auth";
+import productsRouter from "./routes/products.routes";
+import salesRouter from "./routes/sales.routes";
+import orderRouter from "./routes/orders.routes";
+import authRouter from "./routes/auth.routes";
 import userRouter from "./routes/users.routes";
 import { PrismaClient } from "@prisma/client";
 

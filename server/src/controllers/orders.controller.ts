@@ -6,7 +6,7 @@ import {
   getTopProductsWeek as getTopProductsWeekService,
   getBreakdown as getBreakdownService,
   createOrder as createOrderService,
-} from "./services/orders.service";
+} from "../services/orders.service";
 
 // GET ALL ORDERS
 export const getOrders = async (req: Request, res: Response) => {
