@@ -1,8 +1,15 @@
 import { PrismaClient } from "@prisma/client";
 import path from "path";
-import fs from "fs";
+import fs from "fs/promises";
+
+import saveProductImage from "../lib/saveProductImage";
+import formatProductName from "../lib/formatProductName";
+import parseProductPrice from "../lib/parseProductPrice";
 
 const prisma = new PrismaClient();
+
+// centralized image dir
+const IMAGE_DIRECTORY = path.resolve(__dirname, "../../assets/menu");
 
 // top products
 export const getTopProductsService = async () => {
@@ -43,7 +50,6 @@ interface CreateProductParams {
   category: string;
   price: string | number;
   image: string;
-  onImageError: (err: Error) => void;
 }
 
 export const createProductService = async ({
@@ -51,67 +57,36 @@ export const createProductService = async ({
   category,
   price,
   image,
-  onImageError,
 }: CreateProductParams) => {
+  const formattedName = formatProductName(name);
+  const parsedPrice = parseProductPrice(price);
+
+  let imageName: string | undefined;
+
   try {
-    const titleCaseName = name
-      .toLowerCase()
-      .replace(/(?:^|\s)(\w)/g, (match: String) => match.toUpperCase()) // Capitalize the first letter of each word
-      .replace(/\s+/g, ""); // Remove spaces completely
+    // REVISED: Uses extracted image helper
+    imageName = await saveProductImage(image, formattedName);
 
-    // Extract the file extension from the Base64 string
-    const extension = image.substring(
-      "data:image/".length,
-      image.indexOf(";base64")
-    );
-
-    const parsedPrice = parseInt(price.toString(), 10);
-
-    // Form the final image name in Title Case format with extension
-    const imageName = `${titleCaseName}.${extension}`;
-
-    // Define the save path
-    const savePath = path.join(__dirname, "../../assets/menu", imageName);
-
-    // Remove base64 prefix to get the actual data
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-
-    // Convert base64 string to a buffer
-    const imageBuffer = Buffer.from(base64Data, "base64");
-
-    // Save the image file
-    let imageSaved = false;
-
-    fs.writeFile(savePath, imageBuffer, (err) => {
-      if (err) {
-        onImageError(err);
-        return;
-      }
-
-      imageSaved = true;
-      console.log("Image saved as:", imageName);
+    const newProduct = await prisma.product.create({
+      data: {
+        name: formattedName,
+        category,
+        price: parsedPrice,
+        image: `../assets/menu/${imageName}`,
+      },
     });
 
-    try {
-      const newProduct = await prisma.product.create({
-        data: {
-          name: titleCaseName, // Using title case for the name
-          price: parsedPrice, // Save the price as an integer
-          category: category,
-          image: `../assets/menu/${imageName}`,
-        },
-      });
-
-      return {
-        newProduct,
-        imageName,
-        imageSaved,
-      };
-    } catch (error: any) {
-      error.type = "CREATE_PRODUCT_ERROR";
-      throw error;
-    }
+    return {
+      newProduct,
+      imageName,
+      imageSaved: true,
+    };
   } catch (error) {
+    // NEW: Remove image if database creation fails
+    if (imageName) {
+      await fs.unlink(path.join(IMAGE_DIRECTORY, imageName)).catch(() => {});
+    }
+
     throw error;
   }
 };

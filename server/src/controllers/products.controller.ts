@@ -40,10 +40,6 @@ export const createProduct = async (req: Request, res: Response) => {
       category,
       price,
       image,
-      onImageError: (err) => {
-        console.error("Error saving image:", err);
-        return res.status(500).json({ message: "Error saving image" });
-      },
     });
 
     if (result.imageSaved) {
