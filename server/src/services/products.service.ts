@@ -13,13 +13,10 @@ const IMAGE_DIRECTORY = path.resolve(__dirname, "../../assets/menu");
 
 // top products
 export const getTopProductsService = async () => {
-  const total = await prisma.order.groupBy({
+  const topProducts = await prisma.order.groupBy({
     by: ["productId"],
     _sum: {
       moddedPrice: true,
-    },
-    _count: {
-      id: true,
     },
     orderBy: {
       _sum: {
@@ -29,13 +26,19 @@ export const getTopProductsService = async () => {
     take: 3,
   });
 
-  const selected = await prisma.product.findMany({
-    where: {
-      id: { in: total.map((item) => item.productId) },
-    },
-  });
+  const products = await Promise.all(
+    topProducts.map(async (item) => {
+      const product = await prisma.product.findUnique({
+        where: {
+          id: item.productId,
+        },
+      });
 
-  return selected;
+      return product;
+    })
+  );
+
+  return products.filter((product) => product !== null);
 };
 
 // all
@@ -94,16 +97,20 @@ export const createProductService = async ({
 export const deleteProductService = async (id: string) => {
   const deletedProduct = await prisma.product.delete({
     where: {
-      id: id,
+      id,
     },
   });
 
-  const all = await prisma.product.findMany({});
-
-  console.log(all);
-
   return deletedProduct;
 };
+
+interface UpdateProductParams {
+  id: string;
+  name: string;
+  category: string;
+  price: string | number;
+  image: string;
+}
 
 interface UpdateProductParams {
   id: string;
@@ -120,22 +127,28 @@ export const updateProductService = async ({
   price,
   image,
 }: UpdateProductParams) => {
-  const parsedPrice = parseInt(price.toString(), 10);
+  const parsedPrice = Number(price);
 
-  // Update the product in the database
-  const updatedProduct = await prisma.product.update({
-    where: { id: id },
+  if (!name.trim() || !category.trim()) {
+    throw new Error("Product name and category are required.");
+  }
+
+  if (!Number.isSafeInteger(parsedPrice) || parsedPrice < 0) {
+    throw new Error("Invalid product price.");
+  }
+
+  const titleCaseName = name
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+  return prisma.product.update({
+    where: { id },
     data: {
-      name,
-      category,
+      name: titleCaseName,
+      category: category.trim(),
       price: parsedPrice,
       image,
     },
   });
-
-  const all = await prisma.product.findMany({});
-
-  console.log(all);
-
-  return updatedProduct;
 };
