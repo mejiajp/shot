@@ -1,163 +1,146 @@
 import { PrismaClient } from "@prisma/client";
+import subtractMonths from "../lib/subtractMonths";
+
+import type {
+  SalesMetric,
+  SalesTotals,
+  DailySales,
+  SalesRecord,
+  SalesSummaryResponse,
+  MonthlySales,
+} from "../types/sales.types";
 
 const prisma = new PrismaClient();
 
-// top products
-export const getTotalService = async (query: any) => {
-  const oneMonthAgo = new Date();
-  const twoMonthsAgo = new Date();
+// GET SALES TOTALS
+export const getTotalService = async (
+  method: SalesMetric
+): Promise<SalesSummaryResponse> => {
+  const now = new Date();
 
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-  twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+  const oneMonthAgo = subtractMonths(now, 1);
+  const twoMonthsAgo = subtractMonths(now, 2);
 
-  const monthlyRecord = await prisma.ordersSummary.groupBy({
-    by: ["createdAt"],
-    _sum: {
-      totalPrice: true,
-    },
-    _count: {
-      id: true,
-    },
-    where: {
-      createdAt: {
-        gte: oneMonthAgo,
+  const [currentRecords, previousRecords] = await Promise.all([
+    prisma.ordersSummary.findMany({
+      where: {
+        createdAt: {
+          gte: oneMonthAgo,
+          lt: now,
+        },
       },
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-  });
-
-  const prevRecord = await prisma.ordersSummary.groupBy({
-    by: ["createdAt"],
-    _sum: {
-      totalPrice: true,
-    },
-    _count: {
-      id: true,
-    },
-    where: {
-      createdAt: {
-        gte: twoMonthsAgo,
-        lt: oneMonthAgo,
+      select: {
+        id: true,
+        createdAt: true,
+        totalPrice: true,
       },
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-  });
+      orderBy: {
+        createdAt: "asc",
+      },
+    }),
 
-  // Calculate total and totalBefore based on query
-  let total;
-  let totalBefore;
+    prisma.ordersSummary.findMany({
+      where: {
+        createdAt: {
+          gte: twoMonthsAgo,
+          lt: oneMonthAgo,
+        },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        totalPrice: true,
+      },
+    }),
+  ]);
 
-  if (query === "sales") {
-    total = monthlyRecord.reduce(
-      (sum, record) => sum + (record._sum.totalPrice || 0),
+  // Calculate sales, transactions, and average.
+  const calculateTotals = (records: typeof currentRecords): SalesTotals => {
+    const totalSales = records.reduce(
+      (sum, record) => sum + record.totalPrice,
       0
     );
 
-    totalBefore = prevRecord.reduce(
-      (sum, record) => sum + (record._sum.totalPrice || 0),
-      0
-    );
-  } else if (query === "transaction") {
-    total = monthlyRecord.reduce(
-      (count, record) => count + (record._count.id || 0),
-      0
-    );
+    const totalTransactions = records.length;
 
-    totalBefore = prevRecord.reduce(
-      (count, record) => count + (record._count.id || 0),
-      0
-    );
-  } else if (query === "average") {
-    const totalSales = monthlyRecord.reduce(
-      (sum, record) => sum + (record._sum.totalPrice || 0),
-      0
-    );
-
-    const totalCustomers = monthlyRecord.reduce(
-      (count, record) => count + (record._count.id || 0),
-      0
-    );
-
-    total = totalCustomers > 0 ? totalSales / totalCustomers : 0;
-
-    const prevTotalSales = prevRecord.reduce(
-      (sum, record) => sum + (record._sum.totalPrice || 0),
-      0
-    );
-
-    const prevTotalCustomers = prevRecord.reduce(
-      (count, record) => count + (record._count.id || 0),
-      0
-    );
-
-    totalBefore =
-      prevTotalCustomers > 0 ? prevTotalSales / prevTotalCustomers : 0;
-  } else {
-    // Handle unknown query type or provide default response
-    total = null;
-    totalBefore = null;
-  }
-
-  // Prepare the response object
-  const response = {
-    monthlyRecord, // Records grouped by day for the current month
-    total, // Total for the current month (sales or transactions or average based on query type)
-    totalBefore, // Total for the previous month (sales or transactions or average based on query type)
+    return {
+      sales: totalSales,
+      transaction: totalTransactions,
+      average: totalTransactions > 0 ? totalSales / totalTransactions : 0,
+    };
   };
 
-  // Output or further process the detailed records
-  return response;
+  const currentTotals = calculateTotals(currentRecords);
+  const previousTotals = calculateTotals(previousRecords);
+
+  // Group current records by day.
+  const dailyTotals = new Map<string, DailySales>();
+
+  currentRecords.forEach((record) => {
+    const dateKey = record.createdAt.toISOString().slice(0, 10);
+
+    const existing = dailyTotals.get(dateKey);
+
+    if (existing) {
+      existing.totalPrice += record.totalPrice;
+      existing.count += 1;
+    } else {
+      dailyTotals.set(dateKey, {
+        createdAt: new Date(`${dateKey}T00:00:00.000Z`),
+        totalPrice: record.totalPrice,
+        count: 1,
+      });
+    }
+  });
+
+  const monthlyRecord: SalesRecord[] = Array.from(dailyTotals.values()).map(
+    (record) => ({
+      createdAt: record.createdAt,
+      _sum: {
+        totalPrice: record.totalPrice,
+      },
+      _count: {
+        id: record.count,
+      },
+    })
+  );
+
+  return {
+    monthlyRecord,
+    total: currentTotals[method],
+    totalBefore: previousTotals[method],
+  };
 };
 
-// get specific id
-export const getBarService = async () => {
-  interface Order {
-    createdAt: string; // ISO 8601 string
-    totalPrice: number; // Assuming this is a string, otherwise adjust the type
-  }
-
-  interface MonthlyTotals {
-    [month: string]: number;
-  }
-
+// GET MONTHLY SALES
+export const getBarService = async (): Promise<MonthlySales> => {
   const endDate = new Date();
-  const startDate = new Date();
+  const startDate = subtractMonths(endDate, 6);
 
-  startDate.setMonth(startDate.getMonth() - 6); // Subtract 6 months
-
-  // Convert to ISO strings for the query
-  const startDateISO = startDate.toISOString();
-  const endDateISO = endDate.toISOString();
-
-  // Step 2: Query the data
   const orders = await prisma.ordersSummary.findMany({
     where: {
       createdAt: {
-        gte: startDateISO,
-        lt: endDateISO,
+        gte: startDate,
+        lt: endDate,
       },
+    },
+    select: {
+      createdAt: true,
+      totalPrice: true,
     },
     orderBy: {
       createdAt: "asc",
     },
   });
 
-  // Step 3: Group by month and calculate the sum of totalPrice
-  const monthlyTotals = orders.reduce((acc, order) => {
-    const month = new Date(order.createdAt).toISOString().slice(0, 7); // Format as YYYY-MM
+  // Group sales by year and month.
+  const monthlyTotals = orders.reduce<MonthlySales>((acc, order) => {
+    const month = order.createdAt.toISOString().slice(0, 7);
 
-    if (!acc[month]) {
-      acc[month] = 0;
-    }
-
-    acc[month] += order.totalPrice; // Ensure totalPrice is a number
+    acc[month] = (acc[month] ?? 0) + order.totalPrice;
 
     return acc;
-  }, {} as MonthlyTotals);
+  }, {});
 
   return monthlyTotals;
 };

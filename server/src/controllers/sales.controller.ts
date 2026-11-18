@@ -1,28 +1,46 @@
 import { Request, Response } from "express";
 import { getTotalService, getBarService } from "../services/sales.service";
+import type { SalesMetric } from "../types/sales.types";
 
-// top products
+// Validate sales metrics
+const isSalesMetric = (value: unknown): value is SalesMetric => {
+  return value === "sales" || value === "transaction" || value === "average";
+};
+
+// GET SALES TOTALS
 export const getTotal = async (req: Request, res: Response) => {
-  const query = req.query.method;
+  const method = req.query.method;
+
+  if (!isSalesMetric(method)) {
+    return res.status(400).json({
+      error: "Invalid method. Use sales, transaction, or average.",
+    });
+  }
 
   try {
-    const response = await getTotalService(query);
+    const response = await getTotalService(method);
 
-    res.json(response);
+    return res.status(200).json(response);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch data" });
+    console.error("Failed to fetch sales totals:", error);
+
+    return res.status(500).json({
+      error: "Failed to fetch sales data",
+    });
   }
 };
 
-// get specific id
+// GET MONTHLY SALES
 export const getBar = async (req: Request, res: Response) => {
   try {
     const monthlyTotals = await getBarService();
 
-    res.json(monthlyTotals);
+    return res.status(200).json(monthlyTotals);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch products" });
+    console.error("Failed to fetch monthly sales:", error);
+
+    return res.status(500).json({
+      error: "Failed to fetch monthly sales data",
+    });
   }
 };
