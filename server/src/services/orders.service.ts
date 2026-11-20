@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import path from "path";
 import fs from "fs";
+import { CreateOrderInput } from "../types/orders.types";
 
 const prisma = new PrismaClient();
 
@@ -230,99 +231,52 @@ export const getBreakdown = async () => {
 };
 
 // CREATE ORDER
-export const createOrder = async (body: any) => {
-  const orderSummary: any[] = [];
-
+export const createOrder = async (body: CreateOrderInput) => {
   const { paymentMethod, totalPrice, user, createdAt, orders } = body;
-
-  // Save the order summary
-  const getUserId = await prisma.user.findFirst({
-    where: {
-      username: user,
-    },
-  });
-
-  const product = await prisma.product.findFirst({
-    where: {
-      name: {
-        in: orders.map((order: any) => order.productName),
-      },
-    },
-  });
-
-  // Prepare orders with adjusted prices
-  const toOrder = orders.map((order: any) => {
-    const size = order.size;
-    const temperature = order.temperature;
-    const moddedPrice = order.moddedPrice;
-
-    return {
-      size,
-      temperature,
-      moddedPrice,
-      productId: product?.id,
-    };
-  });
-
-  // Save the order summary
-  const sendthis = {
-    paymentMethod: paymentMethod,
-    userId: getUserId?.id,
-    totalPrice: totalPrice,
-    createdAt: createdAt,
-    orders: toOrder,
-  };
 
   const createOrderSummary = await prisma.ordersSummary.create({
     data: {
-      paymentMethod: paymentMethod,
+      paymentMethod,
+      totalPrice,
+
+      ...(createdAt && {
+        createdAt: new Date(createdAt),
+      }),
+
+      // Connect user using unique username
       user: {
         connect: {
-          id: getUserId?.id,
+          username: user,
         },
       },
-      totalPrice: totalPrice,
-      createdAt: createdAt,
+
+      // Create orders and connect their respective products
       orders: {
-        create: toOrder,
+        create: orders.map((order) => ({
+          size: order.size,
+          temperature: order.temperature,
+          moddedPrice: order.moddedPrice,
+
+          product: {
+            connect: {
+              name: order.productName,
+            },
+          },
+        })),
       },
     },
+
     include: {
-      orders: true,
+      orders: {
+        include: {
+          product: true,
+        },
+      },
+      user: true,
     },
   });
 
-  orderSummary.push(createOrderSummary);
   console.log("Order Summary:", createOrderSummary);
 
-  // Export the content of orderSummaries to a JSON file
-  const exportFilePath = path.join(
-    __dirname,
-    "../../seeded_file/orders_summary_seeded.json"
-  );
-
-  // Convert existing content to an array
-  let existingData = [];
-
-  if (fs.existsSync(exportFilePath)) {
-    const existingContent = fs.readFileSync(exportFilePath, "utf-8");
-    existingData = JSON.parse(existingContent);
-  }
-
-  // Merge existing data with new data
-  const combinedData = [...existingData, ...orderSummary];
-
-  // Write combined data back to the file
-  fs.writeFileSync(
-    exportFilePath,
-    JSON.stringify(combinedData, null, 2),
-    "utf-8"
-  );
-
-  console.log(`Order summaries exported to ${exportFilePath}`);
-
-  return {
-    message: "this is successful",
-    product,
-  };
+  return createOrderSummary;
 };
