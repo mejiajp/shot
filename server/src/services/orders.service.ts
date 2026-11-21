@@ -6,7 +6,7 @@ import { CreateOrderInput } from "../types/orders.types";
 const prisma = new PrismaClient();
 
 // GET ALL ORDERS
-export const getAllOrders = async () => {
+export const getAllOrders = async (): Promise<OrderSummaryResponse[]> => {
   const ordersSummaries = await prisma.ordersSummary.findMany({
     include: {
       orders: {
@@ -18,24 +18,23 @@ export const getAllOrders = async () => {
     },
   });
 
-  const ordersData = ordersSummaries.map((summary) => {
-    return {
-      id: summary.id,
-      paymentMethod: summary.paymentMethod,
-      userId: summary.userId,
-      username: summary.user.username,
-      totalPrice: summary.totalPrice,
-      createdAt: summary.createdAt,
-      orders: summary.orders.map((order) => ({
-        id: order.id,
-        productId: order.productId,
-        size: order.size,
-        temperature: order.temperature,
-        moddedPrice: order.moddedPrice,
-        productName: order.product.name,
-      })),
-    };
-  });
+  const ordersData: OrderSummaryResponse[] = ordersSummaries.map((summary) => ({
+    id: summary.id,
+    paymentMethod: summary.paymentMethod,
+    userId: summary.userId,
+    username: summary.user.username,
+    totalPrice: summary.totalPrice,
+    createdAt: summary.createdAt,
+
+    orders: summary.orders.map((order) => ({
+      id: order.id,
+      productId: order.productId,
+      size: order.size,
+      temperature: order.temperature,
+      moddedPrice: order.moddedPrice,
+      productName: order.product.name,
+    })),
+  }));
 
   return ordersData;
 };
