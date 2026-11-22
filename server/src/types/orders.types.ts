@@ -1,3 +1,5 @@
+import type { Product } from "@prisma/client";
+
 export interface CreateOrderItemInput {
   productName: string;
   size: string;
@@ -30,4 +32,40 @@ export interface OrderSummaryResponse {
   totalPrice: number;
   createdAt: Date;
   orders: OrderItemResponse[];
+}
+
+// TOP PRODUCTS
+export interface TopProductResponse {
+  productId: string;
+  count: number;
+  productDetails: Product | null;
+}
+
+// PRODUCT BREAKDOWN
+export interface ProductBreakdownResponse {
+  productId: string;
+  category: Product["category"] | null;
+  count: number;
+  name: string | null;
+  image: Product["image"] | null;
+}
+
+// USER BREAKDOWN
+export interface UserBreakdownResponse {
+  userId: string;
+  username: string | null;
+  count: number;
+}
+
+// PAYMENT METHOD BREAKDOWN
+export interface PaymentMethodBreakdownResponse {
+  paymentMethod: string;
+  count: number;
+}
+
+// COMPLETE BREAKDOWN
+export interface BreakdownResponse {
+  productDetails: ProductBreakdownResponse[];
+  userCounts: UserBreakdownResponse[];
+  paymentMethodCounts: PaymentMethodBreakdownResponse[];
 }

@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import path from "path";
 import fs from "fs";
-import { CreateOrderInput } from "../types/orders.types";
+import { CreateOrderInput, OrderSummaryResponse } from "../types/orders.types";
 
 const prisma = new PrismaClient();
 
@@ -40,7 +40,17 @@ export const getAllOrders = async (): Promise<OrderSummaryResponse[]> => {
 };
 
 // TOP PRODUCTS
-export const getTopProducts = async () => {
+
+import type {
+  BreakdownResponse,
+  PaymentMethodBreakdownResponse,
+  ProductBreakdownResponse,
+  TopProductResponse,
+  UserBreakdownResponse,
+} from "../types/orders.types";
+
+// TOP PRODUCTS
+export const getTopProducts = async (): Promise<TopProductResponse[]> => {
   const total = await prisma.order.groupBy({
     by: ["productId"],
     _count: {
@@ -62,29 +72,30 @@ export const getTopProducts = async () => {
     },
   });
 
-  const productMap = Object.fromEntries(
-    products.map((product) => [product.id, product])
-  );
+  // Create a lookup map for products
+  const productMap = new Map(products.map((product) => [product.id, product]));
 
-  const orderedProducts = total.map((item) => ({
+  // Combine product details with order counts
+  const orderedProducts: TopProductResponse[] = total.map((item) => ({
     productId: item.productId,
     count: item._count.id,
-    productDetails: productMap[item.productId],
+    productDetails: productMap.get(item.productId) ?? null,
   }));
 
   return orderedProducts;
 };
 
 // TOP PRODUCTS WEEK
-export const getTopProductsWeek = async () => {
-  const lastMonth = new Date();
+export const getTopProductsWeek = async (): Promise<TopProductResponse[]> => {
+  const lastWeek = new Date();
 
-  lastMonth.setMonth(lastMonth.getMonth() - 1);
+  lastWeek.setDate(lastWeek.getDate() - 7);
 
+  // Get order summaries from the last 7 days
   const orderSummariesLastWeek = await prisma.ordersSummary.findMany({
     where: {
       createdAt: {
-        gte: lastMonth,
+        gte: lastWeek,
       },
     },
     select: {
@@ -120,22 +131,22 @@ export const getTopProductsWeek = async () => {
     },
   });
 
-  const productMap = Object.fromEntries(
-    products.map((product) => [product.id, product])
-  );
+  // Create a lookup map for products
+  const productMap = new Map(products.map((product) => [product.id, product]));
 
-  const orderedProducts = total.map((item) => ({
+  // Combine product details with weekly order counts
+  const orderedProducts: TopProductResponse[] = total.map((item) => ({
     productId: item.productId,
     count: item._count.id,
-    productDetails: productMap[item.productId],
+    productDetails: productMap.get(item.productId) ?? null,
   }));
 
   return orderedProducts;
 };
 
 // BREAKDOWN
-export const getBreakdown = async () => {
-  // Group orders by productId and count them
+export const getBreakdown = async (): Promise<BreakdownResponse> => {
+  // Group orders by product and count them
   const orderCountsByProduct = await prisma.order.groupBy({
     by: ["productId"],
     _count: {
@@ -143,12 +154,40 @@ export const getBreakdown = async () => {
     },
   });
 
-  // Sort product counts in descending order
-  const sortedOrderCountsByProduct = orderCountsByProduct.sort(
-    (a, b) => b._count.productId - a._count.productId
-  );
+  // Fetch all corresponding product details in one query
+  const products = await prisma.product.findMany({
+    where: {
+      id: {
+        in: orderCountsByProduct.map((order) => order.productId),
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      image: true,
+      category: true,
+    },
+  });
 
-  // Group by userId in the orderSummary table and count, including usernames
+  // Create a lookup map for products
+  const productMap = new Map(products.map((product) => [product.id, product]));
+
+  // Combine product details with order counts
+  const productDetails: ProductBreakdownResponse[] = orderCountsByProduct
+    .map((order) => {
+      const product = productMap.get(order.productId);
+
+      return {
+        productId: order.productId,
+        category: product?.category ?? null,
+        count: order._count.productId,
+        name: product?.name ?? null,
+        image: product?.image ?? null,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  // Group order summaries by user and count them
   const userCounts = await prisma.ordersSummary.groupBy({
     by: ["userId"],
     _count: {
@@ -156,31 +195,32 @@ export const getBreakdown = async () => {
     },
   });
 
-  // Fetch usernames for each userId
-  const userWithNames = await Promise.all(
-    userCounts.map(async (user) => {
-      const userDetails = await prisma.user.findUnique({
-        where: {
-          id: user.userId,
-        },
-        select: {
-          id: true,
-          username: true,
-        },
-      });
+  // Fetch all corresponding usernames in one query
+  const users = await prisma.user.findMany({
+    where: {
+      id: {
+        in: userCounts.map((user) => user.userId),
+      },
+    },
+    select: {
+      id: true,
+      username: true,
+    },
+  });
 
-      return {
-        userId: user.userId,
-        username: userDetails?.username,
-        count: user._count.userId,
-      };
-    })
-  );
+  // Create a lookup map for users
+  const userMap = new Map(users.map((user) => [user.id, user.username]));
 
-  // Sort user counts by count in descending order
-  const sortedUserCounts = userWithNames.sort((a, b) => b.count - a.count);
+  // Combine usernames with user counts
+  const sortedUserCounts: UserBreakdownResponse[] = userCounts
+    .map((user) => ({
+      userId: user.userId,
+      username: userMap.get(user.userId) ?? null,
+      count: user._count.userId,
+    }))
+    .sort((a, b) => b.count - a.count);
 
-  // Group by paymentMethod in the orderSummary table and count
+  // Group order summaries by payment method and count them
   const paymentMethodCounts = await prisma.ordersSummary.groupBy({
     by: ["paymentMethod"],
     _count: {
@@ -189,43 +229,19 @@ export const getBreakdown = async () => {
   });
 
   // Sort payment method counts in descending order
-  const sortedPaymentMethodCounts = paymentMethodCounts.sort(
-    (a, b) => b._count.paymentMethod - a._count.paymentMethod
-  );
+  const sortedPaymentMethodCounts: PaymentMethodBreakdownResponse[] =
+    paymentMethodCounts
+      .map((method) => ({
+        paymentMethod: method.paymentMethod,
+        count: method._count.paymentMethod,
+      }))
+      .sort((a, b) => b.count - a.count);
 
-  // Fetch product details (like category) for each productId
-  const productDetails = await Promise.all(
-    sortedOrderCountsByProduct.map(async (order) => {
-      const product = await prisma.product.findUnique({
-        where: {
-          id: order.productId,
-        },
-        select: {
-          id: true,
-          name: true,
-          image: true,
-          category: true,
-        },
-      });
-
-      return {
-        productId: order.productId,
-        category: product?.category,
-        count: order._count.productId,
-        name: product?.name,
-        image: product?.image,
-      };
-    })
-  );
-
-  // Combine the product breakdown with the separate user and payment method counts
+  // Return combined breakdown
   return {
     productDetails,
     userCounts: sortedUserCounts,
-    paymentMethodCounts: sortedPaymentMethodCounts.map((method) => ({
-      paymentMethod: method.paymentMethod,
-      count: method._count.paymentMethod,
-    })),
+    paymentMethodCounts: sortedPaymentMethodCounts,
   };
 };
 
