@@ -1,6 +1,9 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_UR
+const BASE_URL = import.meta.env.VITE_API_URL
 
-async function caller(endpoint: string, options: RequestInit = {}) {
+async function caller<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers: {
@@ -10,15 +13,29 @@ async function caller(endpoint: string, options: RequestInit = {}) {
     credentials: 'include',
   })
 
+  const contentType = response.headers.get('content-type')
+
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
+    const errorMessage = contentType?.includes('application/json')
+      ? JSON.stringify(await response.json())
+      : await response.text()
+
+    throw new Error(`Request failed (${response.status}): ${errorMessage}`)
   }
 
   if (response.status === 204) {
-    return null
+    return null as T
   }
 
-  return response.json()
+  if (!contentType?.includes('application/json')) {
+    const responseText = await response.text()
+
+    throw new Error(
+      `Expected JSON but received ${contentType || 'unknown content type'}: ${responseText.slice(0, 200)}`
+    )
+  }
+
+  return response.json() as Promise<T>
 }
 
 export default caller
