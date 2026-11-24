@@ -12,6 +12,7 @@ import Products from './pages/Products'
 import Sales from './pages/Sales'
 import Settings from './pages/Settings'
 import SignIn from './pages/SignIn'
+import Accounts from './pages/Accounts'
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -47,6 +48,7 @@ function App() {
                   <Route path="/products" element={<Products />} />
                   <Route path="/sales" element={<Sales />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/accounts" element={<Accounts />} />
                 </Routes>
               </div>
             </ProtectedRoute>

@@ -1,5 +1,6 @@
-import React from 'react'
-
+import { useState, useEffect } from 'react'
+import AccountsTable from '../components/Accounts/AccountsTable'
+import { getUsers } from '../api/users'
 function Accounts() {
   // Call the API to get the accounts data and display it in a table or list format.
   // Accounts management logic
@@ -8,8 +9,8 @@ function Accounts() {
   // 3. Accounts are staff accounts by default, Admin label is additional privilege.
   // 4. Admin can also deactivate other admin accounts, bearing that at least one admin account remains active at all times.
 
-  const [users, setUsers] = React.useState([])
-
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
     const fetchUsers = async () => {
       try {
@@ -30,7 +31,11 @@ function Accounts() {
   }
 
   console.log(users)
-  return <div>Accounts</div>
+  return (
+    <div className="p-6 space-y-6">
+      <AccountsTable users={users} />
+    </div>
+  )
 }
 
 export default Accounts
