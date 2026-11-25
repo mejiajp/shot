@@ -1,6 +1,9 @@
-import React from 'react'
+import React, { useState } from 'react'
+import AccountModal from './AccountModal'
 
-function AccountsTable({ users }) {
+function AccountsTable({ users, onUserCreated }) {
+  const [showModal, setShowModal] = useState(false)
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -12,7 +15,11 @@ function AccountsTable({ users }) {
           </p>
         </div>
 
-        <button className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition">
+        <button
+          type="button"
+          onClick={() => setShowModal(true)}
+          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition"
+        >
           + Add Account
         </button>
       </div>
@@ -54,10 +61,22 @@ function AccountsTable({ users }) {
                     <span className="text-green-600 font-medium">Active</span>
                   </td>
 
-                  <td className="px-6 py-4 text-right">
-                    <button className="text-blue-600 hover:underline">
-                      Manage
-                    </button>
+                  <td className="px-6 py-4">
+                    <div className="flex justify-end items-center gap-3">
+                      <button
+                        type="button"
+                        className="text-blue-600 hover:underline"
+                      >
+                        Update
+                      </button>
+
+                      <button
+                        type="button"
+                        className="text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -77,6 +96,13 @@ function AccountsTable({ users }) {
 
       {/* Account Count */}
       <p className="text-sm text-gray-500">Total accounts: {users.length}</p>
+
+      {/* Account Modal */}
+      <AccountModal
+        isVisible={showModal}
+        onClose={() => setShowModal(false)}
+        onUserCreated={onUserCreated}
+      />
     </div>
   )
 }
